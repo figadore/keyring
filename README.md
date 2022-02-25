@@ -1,5 +1,5 @@
 # Keyring
-A simple cross-platform keychain command line utility
+A simple cross-platform keychain command line utility based on [zalando/go-keyring](https://github.com/zalando/go-keyring)
 
 ## Installation
 ### Global
