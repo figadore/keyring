@@ -18,6 +18,7 @@ type options struct {
 	checkExistence bool
 	clearText      bool
 	del            bool
+	list           bool
 }
 
 // Read secret from OS keyring. If not found, get from stdin, store, and then continue
@@ -30,6 +31,16 @@ func main() {
 	opts, err := parseArgs()
 	if err != nil {
 		log.Fatalf("Error parsing args: %v", err)
+	}
+	if opts.list {
+		keys, err := secretKeys(opts.account)
+		if err != nil {
+			log.Fatalf("Error listing secret keys: %v", err)
+		}
+		if err := writeSecretKeys(os.Stdout, keys); err != nil {
+			log.Fatalf("Error printing secret keys: %v", err)
+		}
+		return
 	}
 	// Do the rest in a testable function
 	checkFetchDel(opts)
@@ -60,19 +71,32 @@ func checkFetchDel(opts *options) {
 
 // Handle any complicated arg parsing here
 func parseArgs() (*options, error) {
+	return parseFlags(flag.CommandLine, os.Args[1:])
+}
+
+func parseFlags(flags *flag.FlagSet, args []string) (*options, error) {
 	// go-keyring module uses two keys to look up a secret, 'account' and
 	// 'service'. This appears to have been done for cross-platform
 	// compatibility, so it seems best to hardcode the account, and store the
 	// username and password as two separate secrets
 	opts := options{}
 	opts.account = "keyring"
-	flag.BoolVar(&opts.clearText, "c", false, "If set, show text while typing (for non-secrets only)")
-	flag.BoolVar(&opts.silent, "s", false, "If set, do not print value (useful for input-only scenarios)")
-	flag.BoolVar(&opts.checkExistence, "e", false, "If set, just check for existence of key")
-	flag.BoolVar(&opts.del, "d", false, "Delete")
-	flag.StringVar(&opts.prompt, "prompt", "", "Prompt string for secret, if it doesn't exist")
-	flag.Parse()
-	args := flag.Args()
+	flags.BoolVar(&opts.clearText, "c", false, "If set, show text while typing (for non-secrets only)")
+	flags.BoolVar(&opts.silent, "s", false, "If set, do not print value (useful for input-only scenarios)")
+	flags.BoolVar(&opts.checkExistence, "e", false, "If set, just check for existence of key")
+	flags.BoolVar(&opts.del, "d", false, "Delete")
+	flags.BoolVar(&opts.list, "l", false, "List existing secret key names (not values)")
+	flags.StringVar(&opts.prompt, "prompt", "", "Prompt string for secret, if it doesn't exist")
+	if err := flags.Parse(args); err != nil {
+		return nil, err
+	}
+	args = flags.Args()
+	if opts.list {
+		if len(args) != 0 || opts.del || opts.checkExistence || opts.clearText || opts.silent || opts.prompt != "" {
+			return nil, fmt.Errorf("-l cannot be combined with a secret name or other options")
+		}
+		return &opts, nil
+	}
 	if len(args) < 1 {
 		return &options{}, fmt.Errorf("expecting at least 1 arg (secret_name), found %d", len(args))
 	}
